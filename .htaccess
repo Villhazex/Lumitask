@@ -1,0 +1,8 @@
+RewriteEngine On
+RewriteBase /Lumitask/
+
+# API routes
+RewriteRule ^api/(.*)$ api.php?route=/api/$1 [QSA,L]
+
+# Block direct access to sensitive dirs
+RewriteRule ^(app|bootstrap|config|database|storage)/ - [F,L]

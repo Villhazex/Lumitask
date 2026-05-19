@@ -1,29 +1,31 @@
 <?php
-session_start();
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
+$app = require __DIR__ . '/bootstrap/app.php';
 
-require_once 'class/TugasModel.php';
+use App\Core\Auth;
+use App\Core\Csrf;
+use App\Repositories\TaskListRepository;
+use App\Repositories\TaskRepository;
+use App\Repositories\NotificationRepository;
 
-$tugas = new TugasModel();
-$user_id = $_SESSION['user_id'];
-$data = $tugas->tampilTugas($user_id);
-$all_rows = [];
-while ($r = $data->fetch_assoc()) {
-    $all_rows[] = $r;
-}
+Auth::requireLogin();
 
-$list_data = $tugas->tampilLists($user_id);
+$user_id = Auth::id();
+$taskRepo = new TaskRepository();
+$listRepo = new TaskListRepository();
+
+$all_rows = $taskRepo->allForUser($user_id);
+$list_rows = $listRepo->listsForUser($user_id);
 $list_meta = [];
 $lists = [];
-while ($list = $list_data->fetch_assoc()) {
+foreach ($list_rows as $list) {
     $key = (string) $list['id'];
     $list_meta[$key] = $list;
     $lists[$key] = [];
 }
+
+(new NotificationRepository())->syncDeadlineReminders($user_id);
+$notifications = (new NotificationRepository())->forUser($user_id, true);
 
 $total = count($all_rows);
 $selesai = count(array_filter($all_rows, fn ($r) => $r['status_tugas'] === 'Selesai'));
@@ -119,8 +121,7 @@ foreach ($list_meta as $key => $meta) {
     $category_icons[$key] = $meta['ikon'] ?: '.';
 }
 
-$toast = $_SESSION['toast'] ?? null;
-unset($_SESSION['toast']);
+$toast = \App\Core\Session::pullFlash('toast');
 
 $calendar_tasks = array_map(function ($r) {
     $k = (string) ($r['accessible_list_id'] ?? $r['list_id'] ?? $r['kategori'] ?? 'pribadi');
@@ -138,7 +139,8 @@ $calendar_tasks = array_map(function ($r) {
 $assetVer = max(
     filemtime(__DIR__.'/css/dashboard.css') ?: 0,
     filemtime(__DIR__.'/js/dashboard.js') ?: 0,
-    filemtime(__DIR__.'/js/calendar.js') ?: 0
+    filemtime(__DIR__.'/js/calendar.js') ?: 0,
+    filemtime(__DIR__.'/js/api.js') ?: 0
 );
 ?>
 <!DOCTYPE html>
@@ -204,6 +206,8 @@ $assetVer = max(
             <div class="topbar-subtitle">Ringkasan seluruh aktivitas</div>
         </div>
         <div class="topbar-right">
+            <div class="notif-bell" id="notifBell" title="Notifikasi">🔔 <span class="notif-count" id="notifCount"><?php echo count($notifications); ?></span></div>
+            <?php if (Auth::isAdmin()) { ?><span class="role-badge">Admin</span><?php } ?>
             <div class="topbar-date"><?php echo date('l, d F Y'); ?></div>
         </div>
     </div>
@@ -539,7 +543,8 @@ foreach ($prio_cfg as $pk => $pc) {
                     <tbody id="detail-tbody">
                     </tbody>
                 </table>
-                <form action="tambah.php" method="POST" class="add-task-row" id="detail-add-form">
+                <form action="tambah.php" method="POST" class="add-task-row" id="detail-add-form" data-ajax="1">
+                    <?php echo Csrf::field(); ?>
                     <input type="hidden" name="kategori" id="detail-add-kat" value="">
                     <input class="field field-name" type="text" name="nama_tugas" placeholder="Tambah tugas baru…" required autocomplete="off">
                     <input class="field field-sm" type="date" name="due_date" title="Deadline">
@@ -567,7 +572,8 @@ foreach ($prio_cfg as $pk => $pc) {
             </div>
             <button class="modal-close" type="button" id="closeAddListModal" aria-label="Tutup">×</button>
         </div>
-        <form action="tambah_list.php" method="POST" class="modal-form" id="addListForm">
+        <form action="tambah_list.php" method="POST" class="modal-form" id="addListForm" data-ajax="1">
+            <?php echo Csrf::field(); ?>
             <input class="modal-field" type="text" name="nama_list" placeholder="Nama list baru" required autocomplete="off">
             <select class="modal-field" name="jenis" id="listJenis" title="Jenis list">
                 <option value="pribadi">Pribadi</option>
@@ -585,16 +591,21 @@ foreach ($prio_cfg as $pk => $pc) {
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
+window.LUMITASK_BASE = <?php echo json_encode($app->config('base_path', '/Lumitask')); ?>;
 window.DASHBOARD_DATA = {
-    lists: <?php echo json_encode($lists); ?>,
-    tasks: <?php echo json_encode($calendar_tasks); ?>,
-    labels: <?php echo json_encode(array_map(fn ($m) => $m['nama_list'] ?? ucfirst($m['slug']), $list_meta)); ?>,
-    meta: <?php echo json_encode($list_meta); ?>,
-    colors: <?php echo json_encode($category_colors); ?>,
-    icons: <?php echo json_encode($category_icons); ?>,
+    lists: <?php echo json_encode($lists, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    tasks: <?php echo json_encode($calendar_tasks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    labels: <?php echo json_encode(array_map(fn ($m) => $m['nama_list'] ?? ucfirst($m['slug'] ?? ''), $list_meta), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    meta: <?php echo json_encode($list_meta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    colors: <?php echo json_encode($category_colors, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    icons: <?php echo json_encode($category_icons, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+    csrf: <?php echo json_encode(Csrf::token()); ?>,
+    role: <?php echo json_encode(Auth::user()['role'] ?? 'member'); ?>,
+    notifications: <?php echo json_encode($notifications, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
     toast: <?php echo json_encode($toast); ?>
 };
 </script>
+<script src="js/api.js?v=<?php echo $assetVer; ?>"></script>
 <script src="js/dashboard.js?v=<?php echo $assetVer; ?>"></script>
 <script src="js/calendar.js?v=<?php echo $assetVer; ?>"></script>
 </body>

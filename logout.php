@@ -1,9 +1,9 @@
 <?php
 
-session_start();
+require __DIR__ . '/bootstrap/app.php';
 
-session_unset();
-session_destroy();
+use App\Core\Auth;
 
-header("Location: login.php");
+Auth::logout();
+header('Location: login.php');
 exit;

@@ -251,6 +251,32 @@ body {
     border-radius: 3px;
 }
 .topbar-btn:hover { background: var(--deco2); }
+.notif-bell {
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 6px 10px;
+    border: 1.5px solid rgba(26,18,8,.15);
+    border-radius: 3px;
+}
+.notif-count {
+    background: var(--deco1);
+    color: #fff;
+    border-radius: 999px;
+    padding: 1px 6px;
+    margin-left: 4px;
+    font-size: 9px;
+}
+.role-badge {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border: 1.5px solid var(--deco2);
+    color: var(--deco2);
+    border-radius: 3px;
+}
 /* ═══ PAGES ═══ */
 .pages { flex: 1; overflow: hidden; position: relative; }
 .page {

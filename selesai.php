@@ -1,21 +1,17 @@
 <?php
 
-session_start();
+require __DIR__ . '/bootstrap/app.php';
 
-require_once 'class/TugasModel.php';
+use App\Core\Auth;
+use App\Core\ActivityLogger;
+use App\Repositories\TaskRepository;
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
+Auth::requireLogin();
+
+$id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+if ($id && (new TaskRepository())->complete($id, Auth::id())) {
+    ActivityLogger::log(Auth::id(), 'task.completed', 'task', $id);
 }
 
-if (isset($_GET['id'])) {
-    $id = $_GET['id'];
-
-    $tugas = new TugasModel();
-
-    $tugas->selesaiTugas($id, $_SESSION['user_id']);
-
-    header('Location: index.php');
-    exit;
-}
+header('Location: index.php');
+exit;

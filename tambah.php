@@ -1,29 +1,37 @@
 <?php
 
-session_start();
+require __DIR__ . '/bootstrap/app.php';
 
-$user_id = $_SESSION['user_id'];
+use App\Core\Auth;
+use App\Core\Csrf;
+use App\Core\Session;
+use App\Core\Validator;
+use App\Core\ActivityLogger;
+use App\Repositories\TaskRepository;
 
-require_once 'class/TugasModel.php';
+Auth::requireLogin();
 
-if (isset($_POST['nama_tugas'])) {
-    $nama = $_POST['nama_tugas'];
-    $due_date = $_POST['due_date'] ?? null;
-    $prioritas = $_POST['prioritas'] ?? '';
-    $kategori = $_POST['kategori'] ?? '';
-    $user_id = $_SESSION['user_id'];
-
-    $tugas = new TugasModel(
-        $nama,
-        'Belum Selesai',
-        $due_date,
-        $prioritas,
-        $kategori,
-        $user_id
-    );
-
-    $tugas->tambahTugas();
-
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !Csrf::validateRequest()) {
+    Session::flash('toast', ['msg' => 'Permintaan tidak valid.', 'type' => 'error']);
     header('Location: index.php');
     exit;
 }
+
+$repo = new TaskRepository();
+$id = $repo->create(Auth::id(), [
+    'nama_tugas' => Validator::sanitizeString($_POST['nama_tugas'] ?? ''),
+    'deskripsi' => Validator::sanitizeString($_POST['deskripsi'] ?? ''),
+    'due_date' => $_POST['due_date'] ?? null,
+    'prioritas' => $_POST['prioritas'] ?? null,
+    'kategori' => $_POST['kategori'] ?? '',
+]);
+
+if ($id) {
+    ActivityLogger::log(Auth::id(), 'task.created', 'task', $id);
+    Session::flash('toast', ['msg' => 'Tugas ditambahkan.', 'type' => 'ok']);
+} else {
+    Session::flash('toast', ['msg' => 'Gagal menambah tugas.', 'type' => 'error']);
+}
+
+header('Location: index.php');
+exit;

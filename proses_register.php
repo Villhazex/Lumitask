@@ -1,32 +1,16 @@
 <?php
 
-session_start();
+require __DIR__ . '/bootstrap/app.php';
 
-require_once 'config/database.php';
+use App\Core\Session;
+use App\Services\AuthService;
 
-$conn = connectDB();
-
-function redirectRegister($message)
+function redirectRegister(string $message): never
 {
-    $_SESSION['register_error'] = $message;
+    Session::flash('register_error', $message);
     header('Location: register.php');
     exit;
 }
-
-function ensureRegisterSchema($conn)
-{
-    $conn->query('
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
-            email VARCHAR(120) NOT NULL UNIQUE,
-            password VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ');
-}
-
-ensureRegisterSchema($conn);
 
 $username = trim($_POST['username'] ?? '');
 $email = trim($_POST['email'] ?? '');
@@ -53,38 +37,11 @@ if ($password !== $confirm) {
     redirectRegister('Konfirmasi password tidak cocok.');
 }
 
-$stmt = $conn->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
-$stmt->bind_param('s', $username);
-$stmt->execute();
-$cekUsername = $stmt->get_result();
-
-if ($cekUsername->num_rows > 0) {
-    redirectRegister('Username sudah digunakan.');
+$result = (new AuthService())->register($username, $email, $password);
+if (!$result['ok']) {
+    redirectRegister($result['msg']);
 }
 
-$stmt = $conn->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
-$stmt->bind_param('s', $email);
-$stmt->execute();
-$cekEmail = $stmt->get_result();
-
-if ($cekEmail->num_rows > 0) {
-    redirectRegister('Email sudah digunakan.');
-}
-
-$passwordHash = password_hash($password, PASSWORD_DEFAULT);
-
-$stmt = $conn->prepare('
-    INSERT INTO users (username, email, password)
-    VALUES (?, ?, ?)
-');
-$stmt->bind_param('sss', $username, $email, $passwordHash);
-$insert = $stmt->execute();
-
-if ($insert) {
-    $_SESSION['register_success'] = 'Registrasi berhasil.';
-} else {
-    $_SESSION['register_error'] = 'Registrasi gagal.';
-}
-
-header('Location: register.php');
+Session::flash('register_success', 'Akun berhasil dibuat. Silakan login.');
+header('Location: login.php');
 exit;

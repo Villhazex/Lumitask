@@ -1,19 +1,17 @@
 <?php
 
-session_start();
+require __DIR__ . '/bootstrap/app.php';
 
-require_once 'class/TugasModel.php';
+use App\Core\Auth;
+use App\Core\ActivityLogger;
+use App\Repositories\TaskRepository;
 
-if (isset($_GET['id'])) {
-    $id = $_GET['id'];
+Auth::requireLogin();
 
-    $user_id = $_SESSION['user_id'];
-
-    $tugas = new TugasModel();
-
-    $tugas->hapusTugas($id, $user_id);
-
-    header('Location: index.php');
-
-    exit;
+$id = (int) ($_POST['id'] ?? $_GET['id'] ?? 0);
+if ($id && (new TaskRepository())->softDelete($id, Auth::id())) {
+    ActivityLogger::log(Auth::id(), 'task.deleted', 'task', $id);
 }
+
+header('Location: index.php');
+exit;

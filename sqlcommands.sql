@@ -1,57 +1,64 @@
-SET NAMES utf8mb4; 
+-- Lumitask schema (fixed). For full v2 install use database/schema.sql
+SET NAMES utf8mb4;
 
--- 1. Tabel users (login & register)
-
-CREATE TABLE users (
-  id INT(11) NOT NULL AUTO_INCREMENT,
+CREATE TABLE IF NOT EXISTS users (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(50) NOT NULL,
   email VARCHAR(120) NOT NULL,
   password VARCHAR(255) NOT NULL,
+  role ENUM('admin','member') NOT NULL DEFAULT 'member',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY username (username), 
-  UNIQUE KEY email (email) 
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; 
+  UNIQUE KEY uk_users_username (username),
+  UNIQUE KEY uk_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. Tabel task_lists (list pribadi / kelompok)
-
-CREATE TABLE task_lists (
-  id INT(11) NOT NULL AUTO_INCREMENT,
-  user_id INT(11) NOT NULL,
+CREATE TABLE IF NOT EXISTS task_lists (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
   nama_list VARCHAR(100) NOT NULL,
   slug VARCHAR(120) NOT NULL,
-  jenis VARCHAR(20) NOT NULL DEFAULT 'pribadi',
+  jenis ENUM('pribadi','kelompok') NOT NULL DEFAULT 'pribadi',
   warna VARCHAR(20) NOT NULL DEFAULT '#b87200',
-  ikon VARCHAR(20) NOT NULL DEFAULT '.',
+  ikon VARCHAR(20) NOT NULL DEFAULT '◉',
+  deleted_at DATETIME NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY unique_user_slug (user_id, slug)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  UNIQUE KEY uk_list_user_slug (user_id, slug),
+  CONSTRAINT fk_lists_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. Tabel tugas
-
-CREATE TABLE tugas (
-  id INT(11) NOT NULL AUTO_INCREMENT,
-  user_id INT(11) NOT NULL,
-  list_id INT(11) DEFAULT NULL,
+CREATE TABLE IF NOT EXISTS tugas (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
+  list_id INT UNSIGNED NULL DEFAULT NULL,
   nama_tugas VARCHAR(255) NOT NULL,
-  status_tugas VARCHAR(50) NOT NULL DEFAULT 'Belum Selesai',
-  due_date DATE DEFAULT NULL,
-  prioritas VARCHAR(20) DEFAULT NULL,
-  kategori VARCHAR(50) DEFAULT NULL,
+  deskripsi TEXT NULL,
+  status_tugas ENUM('Belum Selesai','Selesai') NOT NULL DEFAULT 'Belum Selesai',
+  due_date DATE NULL DEFAULT NULL,
+  prioritas ENUM('tinggi','sedang','rendah') NULL DEFAULT NULL,
+  kategori VARCHAR(50) NULL DEFAULT NULL,
+  is_public TINYINT(1) NOT NULL DEFAULT 0,
+  share_token VARCHAR(64) NULL DEFAULT NULL,
+  deleted_at DATETIME NULL DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY fk_user_tugas (user_id),
-  CONSTRAINT fk_user_tugas
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE 
+  CONSTRAINT fk_tugas_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_tugas_list FOREIGN KEY (list_id) REFERENCES task_lists (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 4. Tabel task_list_members (anggota list kelompok)
-
-CREATE TABLE task_list_members (
-  id INT(11) NOT NULL AUTO_INCREMENT,
-  list_id INT(11) NOT NULL,
-  user_id INT(11) NOT NULL,
+CREATE TABLE IF NOT EXISTS task_list_members (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  list_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  role ENUM('owner','member') NOT NULL DEFAULT 'member',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY unique_list_member (list_id, user_id),
-  KEY idx_member_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  UNIQUE KEY uk_list_member (list_id, user_id),
+  CONSTRAINT fk_members_list FOREIGN KEY (list_id) REFERENCES task_lists (id) ON DELETE CASCADE,
+  CONSTRAINT fk_members_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

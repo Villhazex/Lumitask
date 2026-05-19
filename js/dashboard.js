@@ -58,9 +58,9 @@ function showListDetail(kat) {
                 : '<span style="opacity:.3">—</span>';
             const statusHtml = `<span class="status-pill ${isDone?'done':'pending'}">${isDone?'✓ Selesai':'○ Pending'}</span>`;
             const actHtml = isDone
-                ? `<a href="hapus.php?id=${r.id}" class="action-btn del-btn" onclick="return confirm('Hapus?')">✕</a>`
-                : `<a href="selesai.php?id=${r.id}" class="action-btn done-btn">✓</a>
-                   <a href="hapus.php?id=${r.id}" class="action-btn del-btn" onclick="return confirm('Hapus?')">✕</a>`;
+                ? `<a href="#" data-task-id="${r.id}" class="action-btn del-btn">✕</a>`
+                : `<a href="#" data-task-id="${r.id}" class="action-btn done-btn">✓</a>
+                   <a href="#" data-task-id="${r.id}" class="action-btn del-btn">✕</a>`;
             return `<tr class="${isDone?'row-done':''}">
                 <td style="opacity:.3;font-weight:800">${String(i+1).padStart(2,'0')}</td>
                 <td class="task-name-cell" style="font-weight:700">${escHtml(r.nama_tugas)}</td>
@@ -190,3 +190,74 @@ window.addEventListener('load', () => {
         el.style.strokeDashoffset = 188 - (1.88 * pct);
     });
 });
+
+// ── AJAX task actions (no full reload) ──
+async function ajaxCompleteTask(id) {
+    await LumitaskApi.completeTask(id);
+    showToast('Tugas diselesaikan');
+    location.reload();
+}
+
+async function ajaxDeleteTask(id) {
+    if (!confirm('Hapus tugas ini?')) return;
+    await LumitaskApi.deleteTask(id);
+    showToast('Tugas dihapus');
+    location.reload();
+}
+
+document.addEventListener('click', (e) => {
+    const done = e.target.closest('a.done-btn[data-task-id]');
+    const del = e.target.closest('a.del-btn[data-task-id]');
+    if (done) {
+        e.preventDefault();
+        ajaxCompleteTask(done.dataset.taskId).catch(err => showToast(err.message, 'error'));
+    }
+    if (del) {
+        e.preventDefault();
+        ajaxDeleteTask(del.dataset.taskId).catch(err => showToast(err.message, 'error'));
+    }
+});
+
+const detailAddForm = document.getElementById('detail-add-form');
+if (detailAddForm && detailAddForm.dataset.ajax === '1') {
+    detailAddForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(detailAddForm);
+        try {
+            await LumitaskApi.createTask(Object.fromEntries(fd.entries()));
+            showToast('Tugas ditambahkan');
+            location.reload();
+        } catch (err) {
+            showToast(err.message || 'Gagal menambah tugas', 'error');
+        }
+    });
+}
+
+// Collaboration polling (near-realtime)
+let lastPoll = new Date().toISOString().slice(0, 19).replace('T', ' ');
+setInterval(async () => {
+    if (typeof LumitaskApi === 'undefined') return;
+    try {
+        const res = await LumitaskApi.pollCollaboration(lastPoll);
+        lastPoll = res.server_time || lastPoll;
+        if (res.activities && res.activities.length) {
+            const n = document.getElementById('notifCount');
+            if (n) n.textContent = String(parseInt(n.textContent || '0', 10) + res.activities.length);
+        }
+    } catch (_) { /* silent */ }
+}, 12000);
+
+const notifBell = document.getElementById('notifBell');
+if (notifBell) {
+    notifBell.addEventListener('click', async () => {
+        try {
+            const res = await LumitaskApi.getNotifications();
+            const items = (res.notifications || []).slice(0, 5).map(n => n.title).join('\n') || 'Tidak ada notifikasi baru';
+            alert(items);
+            await LumitaskApi.markNotificationsRead();
+            document.getElementById('notifCount').textContent = '0';
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+}
